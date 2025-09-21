@@ -1,0 +1,6 @@
+name: BasicThrottle
+version: '1.0-dev'
+main: tjt.winsanmwtv.basicThrottle.BasicThrottle
+api-version: '1.21'
+authors: [ winsanmwtv ]
+description: A basic throttle for use with TrainCarts plugin.
