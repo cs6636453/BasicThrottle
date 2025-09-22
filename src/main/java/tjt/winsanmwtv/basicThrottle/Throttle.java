@@ -1,5 +1,8 @@
 package tjt.winsanmwtv.basicThrottle;
 
+import com.bergerkiller.bukkit.common.config.ConfigurationNode;
+import com.bergerkiller.bukkit.tc.attachments.control.CartAttachmentSeat;
+import com.bergerkiller.bukkit.tc.events.seat.MemberSeatEnterEvent;
 import com.bergerkiller.bukkit.tc.properties.CartProperties;
 import com.bergerkiller.bukkit.tc.properties.TrainProperties;
 import net.md_5.bungee.api.ChatMessageType;
@@ -14,6 +17,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDismountEvent;
+import org.bukkit.event.entity.EntityMountEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -23,7 +27,9 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayDeque;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class Throttle implements Listener, CommandExecutor {
@@ -78,7 +84,8 @@ public class Throttle implements Listener, CommandExecutor {
 
             // Enable driving
             modeHashMap.put(player, (byte)0);
-            player.sendMessage(ChatColor.AQUA + "Driving mode activated.");
+            player.sendMessage(ChatColor.AQUA + "Driving mode activated.\nDo not forget to do" +
+                    ChatColor.YELLOW + " /train launch " + ChatColor.AQUA + "to start.");
             inventoryHotbar(player);
             return true;
         }
@@ -140,11 +147,69 @@ public class Throttle implements Listener, CommandExecutor {
         if (hotbar != null) {
             for (int i = 0; i < 9; i++) player.getInventory().setItem(i, hotbar[i]);
         }
+        player.sendMessage(ChatColor.RED + "Emergency brake applied!");
         player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
                 TextComponent.fromLegacyText(ChatColor.RED + "Emergency brake applied!"));
     }
 
-    // --- Event handlers ---
+    public void checkDriverSeat(Player player, CartAttachmentSeat seat) {
+        if (seat.getEntity() != player) return; // Must be the player in the seat
+
+        // Walk through all attachment configuration nodes
+        ArrayDeque<ConfigurationNode> stack = new ArrayDeque<>();
+        ConfigurationNode root = seat.getMember().getProperties().getModel().getConfig();
+        stack.addFirst(root);
+
+        boolean isDriverSeat = false;
+
+        while (!stack.isEmpty()) {
+            ConfigurationNode node = stack.removeFirst();
+            stack.addAll(node.getNodeList("attachments"));
+
+            // Get names of this node
+            List<String> names = node.getList("names", String.class);
+            if (names != null) {
+                for (String name : names) {
+                    if (name.equalsIgnoreCase("driver_seat")) {
+                        isDriverSeat = true;
+                        break;
+                    }
+                }
+            }
+
+            if (isDriverSeat) break;
+        }
+
+        // Sync model (important if modified)
+        seat.getMember().getProperties().getModel().sync();
+
+        if (isDriverSeat) {
+            if (modeHashMap.containsKey(player)) {
+                player.sendMessage(ChatColor.RED + "You're already in driving mode.");
+            } else {
+                player.sendMessage(ChatColor.AQUA + "Driving mode activated.");
+
+                // Save hotbar
+                ItemStack[] hotbar = new ItemStack[9];
+                for (int i = 0; i < 9; i++) hotbar[i] = player.getInventory().getItem(i);
+                invHashMap.put(player, hotbar);
+
+                // Enable driving
+                modeHashMap.put(player, (byte) 0);
+                inventoryHotbar(player);
+            }
+        }
+    }
+
+    // Event: Player enters a seat
+    @EventHandler
+    public void onDriverSeatEnter(MemberSeatEnterEvent event) {
+        if (event.getEntity() instanceof Player player) {
+            CartAttachmentSeat seat = event.getSeat();
+            checkDriverSeat(player, seat);
+        }
+    }
+
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         if (modeHashMap.containsKey(event.getPlayer())) emergencyBrake(event.getPlayer());
@@ -179,6 +244,7 @@ public class Throttle implements Listener, CommandExecutor {
     }
 
     // --- Main throttle loop ---
+    // --- Main throttle loop ---
     public void throttleLoop() {
         for (Player player : modeHashMap.keySet()) {
             CartProperties cartProperties = CartProperties.getEditing(player);
@@ -203,14 +269,19 @@ public class Throttle implements Listener, CommandExecutor {
                 continue;
             }
 
-            // Update speed
-            double newSpeed = Math.max(properties.getSpeedLimit() + throttle.speedChange, 0);
-            properties.setSpeedLimit(newSpeed);
+            // Update speed in b/t
+            double newSpeedBT = Math.max(properties.getSpeedLimit() + throttle.speedChange, 0);
+            properties.setSpeedLimit(newSpeedBT);
+
+            // Convert to km/h
+            double newSpeedKMH = newSpeedBT * 72.0;
 
             // Show action bar
             player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
                     TextComponent.fromLegacyText(throttle.color + throttle.label
-                            + ChatColor.AQUA + " | Speed: " + String.format("%.2f", newSpeed) + " b/t"));
+                            + ChatColor.AQUA + " | Speed: " + ChatColor.YELLOW + String.format("%.2f", newSpeedBT) + ChatColor.AQUA + " b/t"
+                            + ChatColor.BLUE + " (" + ChatColor.GOLD + String.format("%.0f", newSpeedKMH) + ChatColor.BLUE + " km/h)"));
         }
     }
+
 }

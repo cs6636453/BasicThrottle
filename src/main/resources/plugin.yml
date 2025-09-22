@@ -2,5 +2,15 @@ name: BasicThrottle
 version: '1.0-dev'
 main: tjt.winsanmwtv.basicThrottle.BasicThrottle
 api-version: '1.21'
+load: STARTUP
+depend: [ BKCommonLib, Train_Carts ]
 authors: [ winsanmwtv ]
-description: A basic throttle for use with TrainCarts plugin.
+description: "A basic throttle for use with TrainCarts plugin. (Original plugin to MineShafter61's OldThrottle)"
+commands:
+  traindrive:
+    usage: /traindrive <enable|disable>
+    description: The command to enable or disable train throttle.
+permissions:
+  basicthrottle.traindrive:
+    default: true
+    description: Allow players to enable or disable train throttle.
