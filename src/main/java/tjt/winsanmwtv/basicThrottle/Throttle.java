@@ -84,7 +84,7 @@ public class Throttle implements Listener, CommandExecutor {
 
             // Enable driving
             modeHashMap.put(player, (byte)0);
-            player.sendMessage(ChatColor.AQUA + "Driving mode activated.\nDo not forget to do" +
+            player.sendMessage(ChatColor.AQUA + "Do not forget to do" +
                     ChatColor.YELLOW + " /train launch " + ChatColor.AQUA + "to start.");
             inventoryHotbar(player);
             return true;
@@ -92,11 +92,13 @@ public class Throttle implements Listener, CommandExecutor {
 
         if (arg.equals("off") || arg.equals("disable")) {
             if (!modeHashMap.containsKey(player)) {
-                player.sendMessage(ChatColor.RED + "You are not in driving mode.");
+                player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
+                        TextComponent.fromLegacyText(ChatColor.RED + "You're not in driving mode."));
                 return true;
             }
             emergencyBrake(player);
-            player.sendMessage(ChatColor.AQUA + "Driving mode deactivated.");
+            player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
+                    TextComponent.fromLegacyText(ChatColor.AQUA + "Driving mode deactivated."));
             return true;
         }
 
@@ -138,18 +140,20 @@ public class Throttle implements Listener, CommandExecutor {
         if (cartProperties != null) {
             TrainProperties properties = cartProperties.getTrainProperties();
             if (properties != null) properties.setSpeedLimit(0);
+            assert properties != null;
+            if (properties.getSpeedLimit() == 0)
+                player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
+                        TextComponent.fromLegacyText(ChatColor.RED + "Emergency brake applied!"));
+             else
+                player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
+                        TextComponent.fromLegacyText(ChatColor.AQUA + "Driving mode deactivated."));
         }
-
         modeHashMap.remove(player);
         isDriving.remove(player);
-
         ItemStack[] hotbar = invHashMap.remove(player);
         if (hotbar != null) {
             for (int i = 0; i < 9; i++) player.getInventory().setItem(i, hotbar[i]);
         }
-        player.sendMessage(ChatColor.RED + "Emergency brake applied!");
-        player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
-                TextComponent.fromLegacyText(ChatColor.RED + "Emergency brake applied!"));
     }
 
     public void checkDriverSeat(Player player, CartAttachmentSeat seat) {
@@ -187,7 +191,7 @@ public class Throttle implements Listener, CommandExecutor {
             if (modeHashMap.containsKey(player)) {
                 player.sendMessage(ChatColor.RED + "You're already in driving mode.");
             } else {
-                player.sendMessage(ChatColor.AQUA + "Driving mode activated.\nDo not forget to do" +
+                player.sendMessage(ChatColor.AQUA + "Do not forget to do" +
                         ChatColor.YELLOW + " /train launch " + ChatColor.AQUA + "to start.");
 
                 // Save hotbar
@@ -229,6 +233,11 @@ public class Throttle implements Listener, CommandExecutor {
     }
 
     @EventHandler
+    public void shutdown(PlayerDeathEvent event) {
+        if (modeHashMap.containsKey(event.getEntity())) emergencyBrake(event.getEntity());
+    }
+
+    @EventHandler
     public void cancelDrop(PlayerDropItemEvent event) {
         if (modeHashMap.containsKey(event.getPlayer())) event.setCancelled(true);
     }
@@ -255,7 +264,7 @@ public class Throttle implements Listener, CommandExecutor {
             // Must own train
             if (!properties.hasOwners() || !properties.getOwners().contains(player.getName().toLowerCase())) {
                 player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
-                        TextComponent.fromLegacyText(ChatColor.AQUA + "Please claim this train to start"));
+                        TextComponent.fromLegacyText(ChatColor.GREEN + "Please claim this train to start"));
                 continue;
             }
 
@@ -266,7 +275,7 @@ public class Throttle implements Listener, CommandExecutor {
             if (slot <= 4) isDriving.put(player, true);
             if (!isDriving.getOrDefault(player, false)) {
                 player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
-                        TextComponent.fromLegacyText(ChatColor.AQUA + "Please hold brake to start"));
+                        TextComponent.fromLegacyText(ChatColor.GRAY + "Please hold brake to start"));
                 continue;
             }
 
