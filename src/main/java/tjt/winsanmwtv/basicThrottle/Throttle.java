@@ -18,6 +18,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDismountEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -190,6 +191,14 @@ public class Throttle implements Listener, CommandExecutor {
         if (event.getEntity() instanceof Player player) {
             CartAttachmentSeat seat = event.getSeat();
             checkDriverSeat(player, seat);
+        }
+    }
+
+    @EventHandler
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (event.getWhoClicked() instanceof Player player && modeHashMap.containsKey(player)) {
+            // Cancel moving items in the hotbar
+            event.setCancelled(true);
         }
     }
 
