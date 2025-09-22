@@ -17,43 +17,49 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDismountEvent;
-import org.bukkit.event.entity.EntityMountEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.server.PluginDisableEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.configuration.file.FileConfiguration;
+
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayDeque;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.io.File;
+import java.io.IOException;
+import java.util.*;
 
 public class Throttle implements Listener, CommandExecutor {
 
-    // Driving mode & saved hotbar
     private final Map<Player, Byte> modeHashMap = new HashMap<>();
     private final Map<Player, ItemStack[]> invHashMap = new HashMap<>();
     private final Map<Player, Boolean> isDriving = new HashMap<>();
 
-    // Throttle configuration
-    private record ThrottleSlot(String label, ChatColor color, double speedChange) {}
+    record ThrottleSlot(String label, ChatColor color, double speedChange) {}
     private final Map<Integer, ThrottleSlot> throttleMap = Map.of(
-            0, new ThrottleSlot("EB", ChatColor.DARK_RED, -0.020),
-            1, new ThrottleSlot("B4", ChatColor.RED, -0.008),
-            2, new ThrottleSlot("B3", ChatColor.RED, -0.006),
-            3, new ThrottleSlot("B2", ChatColor.GOLD, -0.004),
-            4, new ThrottleSlot("B1", ChatColor.GOLD, -0.002),
-            5, new ThrottleSlot("N", ChatColor.YELLOW, 0.0),
-            6, new ThrottleSlot("P1", ChatColor.GREEN, 0.001),
-            7, new ThrottleSlot("P2", ChatColor.GREEN, 0.003),
-            8, new ThrottleSlot("P3", ChatColor.GREEN, 0.005)
+            0, new ThrottleSlot("EB", ChatColor.DARK_RED, -0.0120),   // Emergency Brake (strong but not extreme)
+            1, new ThrottleSlot("B4", ChatColor.RED, -0.0060),        // Full service brake (reduced)
+            2, new ThrottleSlot("B3", ChatColor.RED, -0.0045),       // Medium brake
+            3, new ThrottleSlot("B2", ChatColor.GOLD, -0.0030),       // Light brake
+            4, new ThrottleSlot("B1", ChatColor.GOLD, -0.0015),      // Minimal brake
+            5, new ThrottleSlot("N", ChatColor.YELLOW, 0.0),         // Neutral
+            6, new ThrottleSlot("P1", ChatColor.GREEN, 0.0015),       // Low power
+            7, new ThrottleSlot("P2", ChatColor.GREEN, 0.0030),       // Medium power
+            8, new ThrottleSlot("P3", ChatColor.GREEN, 0.0045)        // High power (slightly reduced)
     );
 
-    // --- Command handling ---
+    private final BasicThrottle plugin;
+    private final FileConfiguration invConfig;
+    private final File invFile;
+
+    public Throttle(BasicThrottle plugin, FileConfiguration invConfig, File invFile) {
+        this.plugin = plugin;
+        this.invConfig = invConfig;
+        this.invFile = invFile;
+    }
+
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, String[] args) {
         if (!(sender instanceof Player player)) {
@@ -77,12 +83,13 @@ public class Throttle implements Listener, CommandExecutor {
                 return true;
             }
 
-            // Save hotbar
             ItemStack[] hotbar = new ItemStack[9];
             for (int i = 0; i < 9; i++) hotbar[i] = player.getInventory().getItem(i);
             invHashMap.put(player, hotbar);
 
-            // Enable driving
+            for (int i = 0; i < 9; i++) invConfig.set("savedHotbars." + player.getUniqueId() + "." + i, hotbar[i]);
+            saveInvConfig();
+
             modeHashMap.put(player, (byte)0);
             player.sendMessage(ChatColor.AQUA + "Do not forget to do" +
                     ChatColor.YELLOW + " /train launch " + ChatColor.AQUA + "to start.");
@@ -106,7 +113,6 @@ public class Throttle implements Listener, CommandExecutor {
         return true;
     }
 
-    // --- Inventory setup ---
     public void inventoryHotbar(Player player) {
         Object[][] items = {
                 {Material.BARRIER, "§4EB"},
@@ -134,28 +140,60 @@ public class Throttle implements Listener, CommandExecutor {
         return item;
     }
 
-    // --- Emergency brake ---
     public void emergencyBrake(Player player) {
         CartProperties cartProperties = CartProperties.getEditing(player);
+        double speed = 0.0;
         if (cartProperties != null) {
             TrainProperties properties = cartProperties.getTrainProperties();
-            if (properties != null) properties.setSpeedLimit(0);
-            assert properties != null;
-            if (properties.getSpeedLimit() == 0)
-                player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
-                        TextComponent.fromLegacyText(ChatColor.RED + "Emergency brake applied!"));
-             else
-                player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
-                        TextComponent.fromLegacyText(ChatColor.AQUA + "Driving mode deactivated."));
+            if (properties != null) {
+                speed = properties.getSpeedLimit();
+                properties.setSpeedLimit(0);
+            }
         }
+
+        // Remove from maps
         modeHashMap.remove(player);
         isDriving.remove(player);
+
+        // Restore hotbar
         ItemStack[] hotbar = invHashMap.remove(player);
         if (hotbar != null) {
             for (int i = 0; i < 9; i++) player.getInventory().setItem(i, hotbar[i]);
         }
+
+        // Remove from inventory.yml
+        invConfig.set("savedHotbars." + player.getUniqueId(), null);
+        saveInvConfig();
+
+        // Action bar feedback
+        if (speed == 0.0) {
+            player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
+                    TextComponent.fromLegacyText(ChatColor.AQUA + "Driving mode deactivated."));
+        } else {
+            player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
+                    TextComponent.fromLegacyText(ChatColor.RED + "Emergency brake applied!"));
+        }
     }
 
+
+    private void saveInvConfig() {
+        try {
+            invConfig.save(invFile);
+        } catch (IOException e) {
+            plugin.getLogger().warning("Failed to save inventory.yml: " + e.getMessage());
+        }
+    }
+
+    // Event: Player enters a seat
+    @EventHandler
+    public void onDriverSeatEnter(MemberSeatEnterEvent event) {
+        if (event.getEntity() instanceof Player player) {
+            CartAttachmentSeat seat = event.getSeat();
+            checkDriverSeat(player, seat);
+        }
+    }
+
+    // --- Check if this seat is driver_seat ---
     public void checkDriverSeat(Player player, CartAttachmentSeat seat) {
         if (seat.getEntity() != player) return; // Must be the player in the seat
 
@@ -170,7 +208,6 @@ public class Throttle implements Listener, CommandExecutor {
             ConfigurationNode node = stack.removeFirst();
             stack.addAll(node.getNodeList("attachments"));
 
-            // Get names of this node
             List<String> names = node.getList("names", String.class);
             if (names != null) {
                 for (String name : names) {
@@ -180,11 +217,10 @@ public class Throttle implements Listener, CommandExecutor {
                     }
                 }
             }
-
             if (isDriverSeat) break;
         }
 
-        // Sync model (important if modified)
+        // Sync model
         seat.getMember().getProperties().getModel().sync();
 
         if (isDriverSeat) {
@@ -194,30 +230,30 @@ public class Throttle implements Listener, CommandExecutor {
                 player.sendMessage(ChatColor.AQUA + "Do not forget to do" +
                         ChatColor.YELLOW + " /train launch " + ChatColor.AQUA + "to start.");
 
-                // Save hotbar
+                // Save hotbar in memory
                 ItemStack[] hotbar = new ItemStack[9];
                 for (int i = 0; i < 9; i++) hotbar[i] = player.getInventory().getItem(i);
                 invHashMap.put(player, hotbar);
 
-                // Enable driving
+                // Save hotbar to inventory.yml
+                for (int i = 0; i < 9; i++) invConfig.set("savedHotbars." + player.getUniqueId() + "." + i, hotbar[i]);
+                try {
+                    invConfig.save(invFile);
+                } catch (IOException e) {
+                    plugin.getLogger().warning("Failed to save inventory.yml: " + e.getMessage());
+                }
+
+                // Enable driving mode
                 modeHashMap.put(player, (byte) 0);
                 inventoryHotbar(player);
             }
         }
     }
 
-    // Event: Player enters a seat
-    @EventHandler
-    public void onDriverSeatEnter(MemberSeatEnterEvent event) {
-        if (event.getEntity() instanceof Player player) {
-            CartAttachmentSeat seat = event.getSeat();
-            checkDriverSeat(player, seat);
-        }
-    }
-
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        if (modeHashMap.containsKey(event.getPlayer())) emergencyBrake(event.getPlayer());
+        Player player = event.getPlayer();
+        if (modeHashMap.containsKey(player)) emergencyBrake(player);
     }
 
     @EventHandler
@@ -229,11 +265,6 @@ public class Throttle implements Listener, CommandExecutor {
 
     @EventHandler
     public void onDeath(PlayerDeathEvent event) {
-        if (modeHashMap.containsKey(event.getEntity())) emergencyBrake(event.getEntity());
-    }
-
-    @EventHandler
-    public void shutdown(PlayerDeathEvent event) {
         if (modeHashMap.containsKey(event.getEntity())) emergencyBrake(event.getEntity());
     }
 
@@ -253,15 +284,12 @@ public class Throttle implements Listener, CommandExecutor {
         }
     }
 
-    // --- Main throttle loop ---
-    // --- Main throttle loop ---
     public void throttleLoop() {
         for (Player player : modeHashMap.keySet()) {
             CartProperties cartProperties = CartProperties.getEditing(player);
             TrainProperties properties = cartProperties != null ? cartProperties.getTrainProperties() : null;
             if (properties == null) continue;
 
-            // Must own train
             if (!properties.hasOwners() || !properties.getOwners().contains(player.getName().toLowerCase())) {
                 player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
                         TextComponent.fromLegacyText(ChatColor.GREEN + "Please claim this train to start"));
@@ -271,7 +299,6 @@ public class Throttle implements Listener, CommandExecutor {
             int slot = player.getInventory().getHeldItemSlot();
             ThrottleSlot throttle = throttleMap.getOrDefault(slot, new ThrottleSlot("Unknown", ChatColor.WHITE, 0.0));
 
-            // Require brake to start
             if (slot <= 4) isDriving.put(player, true);
             if (!isDriving.getOrDefault(player, false)) {
                 player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
@@ -279,14 +306,10 @@ public class Throttle implements Listener, CommandExecutor {
                 continue;
             }
 
-            // Update speed in b/t
             double newSpeedBT = Math.max(properties.getSpeedLimit() + throttle.speedChange, 0);
             properties.setSpeedLimit(newSpeedBT);
-
-            // Convert to km/h
             double newSpeedKMH = newSpeedBT * 72.0;
 
-            // Show action bar
             player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
                     TextComponent.fromLegacyText(throttle.color + throttle.label
                             + ChatColor.AQUA + " | Speed: " + ChatColor.YELLOW + String.format("%.2f", newSpeedBT) + ChatColor.AQUA + " b/t"
@@ -294,4 +317,9 @@ public class Throttle implements Listener, CommandExecutor {
         }
     }
 
+    public void shutdown() {
+        for (Player player : new ArrayList<>(modeHashMap.keySet())) {
+            emergencyBrake(player);
+        }
+    }
 }
