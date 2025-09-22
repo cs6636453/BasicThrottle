@@ -5,7 +5,7 @@ api-version: '1.21'
 load: STARTUP
 depend: [ BKCommonLib, Train_Carts ]
 authors: [ winsanmwtv ]
-description: "A basic throttle for use with TrainCarts plugin. (Original plugin to MineShafter61's OldThrottle)"
+description: "A basic throttle for use with TrainCarts plugin. (Original plugin to Mineshafter61's OldThrottle)"
 commands:
   traindrive:
     usage: /traindrive <enable|disable>
