@@ -187,7 +187,8 @@ public class Throttle implements Listener, CommandExecutor {
             if (modeHashMap.containsKey(player)) {
                 player.sendMessage(ChatColor.RED + "You're already in driving mode.");
             } else {
-                player.sendMessage(ChatColor.AQUA + "Driving mode activated.");
+                player.sendMessage(ChatColor.AQUA + "Driving mode activated.\nDo not forget to do" +
+                        ChatColor.YELLOW + " /train launch " + ChatColor.AQUA + "to start.");
 
                 // Save hotbar
                 ItemStack[] hotbar = new ItemStack[9];
