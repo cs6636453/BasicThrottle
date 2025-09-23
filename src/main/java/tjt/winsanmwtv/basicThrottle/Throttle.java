@@ -40,15 +40,15 @@ public class Throttle implements Listener, CommandExecutor {
 
     record ThrottleSlot(String label, ChatColor color, double speedChange) {}
     private final Map<Integer, ThrottleSlot> throttleMap = Map.of(
-            0, new ThrottleSlot("EB", ChatColor.DARK_RED, -0.0120),   // Emergency Brake (strong but not extreme)
-            1, new ThrottleSlot("B4", ChatColor.RED, -0.0060),        // Full service brake (reduced)
-            2, new ThrottleSlot("B3", ChatColor.RED, -0.0045),       // Medium brake
-            3, new ThrottleSlot("B2", ChatColor.GOLD, -0.0030),       // Light brake
-            4, new ThrottleSlot("B1", ChatColor.GOLD, -0.0015),      // Minimal brake
+            0, new ThrottleSlot("EB", ChatColor.DARK_RED, -0.0104),   // Emergency Brake (strong but not extreme)
+            1, new ThrottleSlot("B4", ChatColor.RED, -0.0052),        // Full service brake (reduced)
+            2, new ThrottleSlot("B3", ChatColor.RED, -0.0039),       // Medium brake
+            3, new ThrottleSlot("B2", ChatColor.GOLD, -0.0026),       // Light brake
+            4, new ThrottleSlot("B1", ChatColor.GOLD, -0.0013),      // Minimal brake
             5, new ThrottleSlot("N", ChatColor.YELLOW, 0.0),         // Neutral
-            6, new ThrottleSlot("P1", ChatColor.GREEN, 0.0015),       // Low power
-            7, new ThrottleSlot("P2", ChatColor.GREEN, 0.0030),       // Medium power
-            8, new ThrottleSlot("P3", ChatColor.GREEN, 0.0045)        // High power (slightly reduced)
+            6, new ThrottleSlot("P1", ChatColor.GREEN, 0.0013),       // Low power
+            7, new ThrottleSlot("P2", ChatColor.GREEN, 0.0026),       // Medium power
+            8, new ThrottleSlot("P3", ChatColor.GREEN, 0.0039)        // High power (slightly reduced)
     );
 
     private final BasicThrottle plugin;
