@@ -206,30 +206,21 @@ public class Throttle implements Listener, CommandExecutor {
     public void checkDriverSeat(Player player, CartAttachmentSeat seat) {
         if (seat.getEntity() != player) return; // Must be the player in the seat
 
-        // Walk through all attachment configuration nodes
-        ArrayDeque<ConfigurationNode> stack = new ArrayDeque<>();
-        ConfigurationNode root = seat.getMember().getProperties().getModel().getConfig();
-        stack.addFirst(root);
-
+        // Check ONLY this seat's config
+        ConfigurationNode node = seat.getConfig();
         boolean isDriverSeat = false;
 
-        while (!stack.isEmpty()) {
-            ConfigurationNode node = stack.removeFirst();
-            stack.addAll(node.getNodeList("attachments"));
-
-            List<String> names = node.getList("names", String.class);
-            if (names != null) {
-                for (String name : names) {
-                    if (name.equalsIgnoreCase("driver_seat")) {
-                        isDriverSeat = true;
-                        break;
-                    }
+        List<String> names = node.getList("names", String.class);
+        if (names != null) {
+            for (String name : names) {
+                if (name.equalsIgnoreCase("driver_seat")) {
+                    isDriverSeat = true;
+                    break;
                 }
             }
-            if (isDriverSeat) break;
         }
 
-        // Sync model
+        // Sync model (still fine here, optional)
         seat.getMember().getProperties().getModel().sync();
 
         if (isDriverSeat) {
@@ -245,7 +236,9 @@ public class Throttle implements Listener, CommandExecutor {
                 invHashMap.put(player, hotbar);
 
                 // Save hotbar to inventory.yml
-                for (int i = 0; i < 9; i++) invConfig.set("savedHotbars." + player.getUniqueId() + "." + i, hotbar[i]);
+                for (int i = 0; i < 9; i++) {
+                    invConfig.set("savedHotbars." + player.getUniqueId() + "." + i, hotbar[i]);
+                }
                 try {
                     invConfig.save(invFile);
                 } catch (IOException e) {
